@@ -1,0 +1,375 @@
+// Dino Endless Runner
+// by Gemini
+// Instructions: Press the 'space' bar to jump over the cacti.
+
+// --- Game Settings ---
+let gameSpeed = 6;
+const initialGameSpeed = 6;
+const gameSpeedIncrease = 0.005;
+
+// --- Player (Dino) Variables ---
+let dino;
+const dinoWidth = 40;
+const dinoHeight = 60;
+const gravity = 0.7;
+const jumpForce = -18;
+
+// --- Obstacle Variables ---
+let obstacles = [];
+const obstacleMinWidth = 20;
+const obstacleMaxWidth = 50;
+const obstacleMinHeight = 40;
+const obstacleMaxHeight = 80;
+let nextObstacleFrame;
+
+// --- Game State ---
+let score = 0;
+let gameState = 'playing'; // 'playing' or 'gameOver'
+
+// --- Scenery ---
+let groundY;
+let skyColor;
+let groundColor;
+let mountainColor;
+let mountainColorStroke;
+
+let stars = [];
+let mountains = [];
+let clouds = [];
+
+// --- p5.js Setup Function ---
+// This runs once when the sketch starts.
+function setup() {
+    createCanvas(windowWidth, 400);
+    noSmooth(); // For a crisp, pixelated look
+
+    // Define colors for the scene
+    skyColor = color(25, 20, 40);
+    groundColor = color(89, 63, 56);
+    mountainColor = color(50, 40, 70);
+    mountainColorStroke = color(30, 20, 50);
+
+    groundY = height - 50;
+
+    // Initialize the player character
+    dino = new Dino();
+
+    // Set the initial timer for the first obstacle
+    nextObstacleFrame = int(random(60, 120));
+
+    // Generate the initial background elements
+    for (let i = 0; i < 100; i++) {
+        stars.push({
+            x: random(width),
+            y: random(groundY - 20),
+            size: random(1, 3)
+        });
+    }
+    for (let i = 0; i < 3; i++) {
+        mountains.push(new Mountain());
+    }
+    for (let i = 0; i < 10; i++) {
+        clouds.push(new Cloud());
+    }
+}
+
+// --- p5.js Draw Function ---
+// This runs in a loop, creating each frame of the game.
+function draw() {
+    // --- Drawing the Scenery ---
+    background(skyColor);
+
+    // Draw stars
+    fill(255, 255, 200);
+    noStroke();
+    for (const star of stars) {
+        rect(star.x, star.y, star.size, star.size);
+    }
+
+    // Draw mountains
+    for (const mountain of mountains) {
+        mountain.show();
+        if (gameState === 'playing') mountain.move(gameSpeed * 0.2);
+    }
+
+    // Draw ground
+    fill(groundColor);
+    noStroke();
+    rect(0, groundY, width, height - groundY);
+
+    // Draw clouds
+    for (const cloud of clouds) {
+        cloud.show();
+        if (gameState === 'playing') cloud.move(gameSpeed * 0.5);
+    }
+
+
+    // --- Game Logic ---
+    if (gameState === 'playing') {
+        // Handle Dino
+        dino.update();
+        dino.show();
+
+        // Handle Obstacles
+        handleObstacles();
+        
+        // Update game speed and score
+        gameSpeed += gameSpeedIncrease;
+        score += 1;
+
+    } else if (gameState === 'gameOver') {
+        // Keep showing the final scene
+        dino.show();
+        for (const o of obstacles) {
+            o.show();
+        }
+        // Display Game Over text
+        displayGameOver();
+    }
+    
+    // --- UI Display ---
+    displayScoreAndInstructions();
+}
+
+
+// --- Game Object Classes ---
+
+/**
+ * The Dino (Player) Class
+ */
+class Dino {
+    constructor() {
+        this.x = 60;
+        this.y = groundY - dinoHeight;
+        this.w = dinoWidth;
+        this.h = dinoHeight;
+        this.vy = 0; // Vertical velocity
+    }
+
+    jump() {
+        // Can only jump if on the ground
+        if (this.y === groundY - this.h) {
+            this.vy = jumpForce;
+        }
+    }
+
+    update() {
+        // Apply gravity
+        this.y += this.vy;
+        this.vy += gravity;
+
+        // Prevent falling through the ground
+        this.y = constrain(this.y, 0, groundY - this.h);
+    }
+
+    show() {
+        // Simple pixelated dino design
+        fill(100, 200, 120); // Dino color
+        noStroke();
+        
+        // Tail
+        rect(this.x, this.y + 10, 10, 10);
+        rect(this.x - 10, this.y + 20, 10, 10);
+        
+        // Body
+        rect(this.x + 10, this.y, 20, 40);
+        
+        // Head
+        rect(this.x + 20, this.y - 10, 20, 20);
+        rect(this.x + 30, this.y, 10, 30);
+        
+        // Legs
+        if(frameCount % 20 < 10) { // Simple running animation
+             rect(this.x + 10, this.y + 40, 10, 20);
+             rect(this.x + 25, this.y + 40, 10, 10);
+        } else {
+             rect(this.x + 10, this.y + 40, 10, 10);
+             rect(this.x + 25, this.y + 40, 10, 20);
+        }
+        
+        // Eye
+        fill(0);
+        rect(this.x + 32, this.y-5, 5, 5)
+    }
+
+    collides(obstacle) {
+        // Simple rectangle collision detection
+        return (
+            this.x < obstacle.x + obstacle.w &&
+            this.x + this.w > obstacle.x &&
+            this.y < obstacle.y + obstacle.h &&
+            this.y + this.h > obstacle.y
+        );
+    }
+}
+
+/**
+ * The Obstacle (Cactus) Class
+ */
+class Obstacle {
+    constructor() {
+        this.w = random(obstacleMinWidth, obstacleMaxWidth);
+        this.h = random(obstacleMinHeight, obstacleMaxHeight);
+        this.x = width;
+        this.y = groundY - this.h;
+    }
+
+    move() {
+        this.x -= gameSpeed;
+    }
+
+    show() {
+        fill(150, 200, 100); // Cactus color
+        stroke(groundColor);
+        strokeWeight(4);
+        rect(this.x, this.y, this.w, this.h);
+        
+        // Add some cactus arms for detail
+        noStroke();
+        fill(150, 200, 100);
+        if(this.w > 30){
+             rect(this.x-5, this.y + 10, 5, this.h * 0.4);
+             rect(this.x+this.w, this.y + 20, 5, this.h * 0.5);
+        }
+    }
+}
+
+/**
+ * The Cloud Class for parallax background
+ */
+class Cloud {
+    constructor() {
+        this.x = random(width, width * 2);
+        this.y = random(50, groundY - 150);
+        this.w = random(50, 150);
+        this.h = random(10, 20);
+    }
+
+    move(speed) {
+        this.x -= speed;
+        if (this.x + this.w < 0) {
+            this.x = random(width, width * 1.5);
+            this.y = random(50, groundY - 150);
+        }
+    }
+
+    show() {
+        fill(255, 255, 255, 30); // Transparent white
+        noStroke();
+        rect(this.x, this.y, this.w, this.h);
+        rect(this.x + 20, this.y - 5, this.w - 40, this.h + 10);
+    }
+}
+
+
+/**
+ * The Mountain Class for parallax background
+ */
+class Mountain {
+    constructor() {
+        this.x = random(width, width * 1.5);
+        this.y = groundY;
+        this.peakHeight = random(100, 250);
+        this.baseWidth = this.peakHeight * random(1.5, 2.5);
+    }
+
+    move(speed) {
+        this.x -= speed;
+        if (this.x + this.baseWidth / 2 < 0) {
+            // Reset mountain when it goes off-screen
+            this.x = width + this.baseWidth / 2;
+            this.peakHeight = random(100, 250);
+            this.baseWidth = this.peakHeight * random(1.5, 2.5);
+        }
+    }
+
+    show() {
+        fill(mountainColor);
+        stroke(mountainColorStroke);
+        strokeWeight(6);
+        triangle(
+            this.x - this.baseWidth / 2, this.y,
+            this.x, this.y - this.peakHeight,
+            this.x + this.baseWidth / 2, this.y
+        );
+    }
+}
+
+
+// --- Helper Functions ---
+
+function handleObstacles() {
+    // Spawn new obstacles
+    if (frameCount > nextObstacleFrame) {
+        obstacles.push(new Obstacle());
+        // Set the timer for the next one.
+        // As game speed increases, the denominator gets smaller, making obstacles appear more frequently.
+        let timeToNext = int(random(60, 150) * (initialGameSpeed / gameSpeed));
+        nextObstacleFrame = frameCount + timeToNext;
+    }
+
+    // Move, show, and check for collisions
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let o = obstacles[i];
+        o.move();
+        o.show();
+
+        if (dino.collides(o)) {
+            gameState = 'gameOver';
+        }
+
+        // Remove obstacles that are off-screen
+        if (o.x + o.w < 0) {
+            obstacles.splice(i, 1);
+        }
+    }
+}
+
+function displayScoreAndInstructions() {
+    fill(255);
+    textAlign(LEFT, TOP);
+    textSize(20);
+    text(`Score: ${score}`, 10, 10);
+    
+    textAlign(CENTER, TOP);
+    text("Press SPACE to jump", width / 2, 10);
+}
+
+function displayGameOver() {
+    fill(255, 100, 100);
+    textAlign(CENTER, CENTER);
+    textSize(50);
+    text("GAME OVER", width / 2, height / 2 - 40);
+    
+    textSize(20);
+    fill(255);
+    text(`Final Score: ${score}`, width / 2, height / 2 + 10);
+    text("Press 'R' to Restart", width / 2, height / 2 + 40);
+}
+
+function resetGame() {
+    gameSpeed = initialGameSpeed;
+    score = 0;
+    obstacles = [];
+    nextObstacleFrame = frameCount + int(random(60, 120));
+    dino = new Dino();
+    gameState = 'playing';
+}
+
+// --- User Input Functions ---
+
+function keyPressed() {
+    if ((key === ' ' || keyCode === UP_ARROW) && gameState === 'playing') {
+        dino.jump();
+    }
+    if ((key === 'r' || key === 'R') && gameState === 'gameOver') {
+        resetGame();
+    }
+}
+
+// Make the canvas responsive to window size
+function windowResized() {
+    resizeCanvas(windowWidth, 400);
+    groundY = height - 50;
+    // You might want to reposition elements here if needed
+}
